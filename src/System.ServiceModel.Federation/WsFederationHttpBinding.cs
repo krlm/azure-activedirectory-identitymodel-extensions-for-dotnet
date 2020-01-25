@@ -4,115 +4,205 @@
 
 #pragma warning disable 1591
 
+using System.Collections.ObjectModel;
+using System.IdentityModel.Selectors;
 using System.ServiceModel.Channels;
-using System.ServiceModel;
+using System.ServiceModel.Description;
 
 namespace System.ServiceModel.Federation
 {
-
     public class WsFederationBinding : WSHttpBinding
     {
-        static readonly MessageSecurityVersion WSMessageSecurityVersion = MessageSecurityVersion.WSSecurity11WSTrustFebruary2005WSSecureConversationFebruary2005WSSecurityPolicy11BasicSecurityProfile10;
-
-        WsFederationHttpSecurity _security = new WsFederationHttpSecurity();
-
-        public WsFederationBinding()
-            : base()
+        public WsFederationBinding() : base(SecurityMode.TransportWithMessageCredential)
         {
+            Security.Message.ClientCredentialType = MessageCredentialType.IssuedToken;
         }
 
         // binding is always TransportWithMessageCredentialy
-        public WsFederationBinding(FederatedSecurity federatedSecurity)
+        public WsFederationBinding(IssuedTokenParameters issuedTokenParameters) : base(SecurityMode.TransportWithMessageCredential)
         {
             Security = new WSHttpSecurity
             {
-                 Mode = SecurityMode.TransportWithMessageCredential
+                Mode = SecurityMode.TransportWithMessageCredential
             };
+
+            IssuedTokenParameters = issuedTokenParameters;
         }
 
-        // if you make changes here, see also c.TryCreate()
-        internal static bool TryCreate(SecurityBindingElement sbe, TransportBindingElement transport, out Binding binding)
+        public IssuedTokenParameters IssuedTokenParameters
         {
-            binding = null;
+            get;
+        }
 
-            // reverse GetTransport
-            HttpTransportSecurity transportSecurity = new HttpTransportSecurity();
-            WsFederationHttpSecurityMode mode;
-            if (!GetSecurityModeFromTransport(transport, transportSecurity, out mode))
-            {
-                return false;
-            }
+        public override BindingElementCollection CreateBindingElements()
+        {
+            return base.CreateBindingElements();
+        }
 
-            HttpsTransportBindingElement httpsBinding = transport as HttpsTransportBindingElement;
-            if (httpsBinding != null && httpsBinding.MessageSecurityVersion != null)
-            {
-                if (httpsBinding.MessageSecurityVersion.SecurityPolicyVersion != WSMessageSecurityVersion.SecurityPolicyVersion)
-                {
-                    return false;
-                }
-            }
+        public override IChannelFactory<TChannel> BuildChannelFactory<TChannel>(BindingParameterCollection parameters)
+        {
+            return base.BuildChannelFactory<TChannel>(parameters);
+        }
 
-            WsFederationHttpSecurity security;
-            if (TryCreateSecurity(sbe, mode, transportSecurity, out security))
-            {
-                binding = new WsFederationHttpBinding(security);
-            }
+        public override bool CanBuildChannelFactory<TChannel>(BindingParameterCollection parameters)
+        {
+            return base.CanBuildChannelFactory<TChannel>(parameters);
+        }
 
-            return binding != null;
+        protected override Channels.SecurityBindingElement CreateMessageSecurity()
+        {
+            return base.CreateMessageSecurity();
         }
 
         protected override TransportBindingElement GetTransport()
         {
-            if (_security.Mode == WsFederationHttpSecurityMode.None)
-            {
-                return this.HttpTransport;
-            }
-            else
-            {
-                return this.HttpsTransport;
-            }
+            return base.GetTransport();
         }
+    }
 
-        internal static bool GetSecurityModeFromTransport(TransportBindingElement transport, HttpTransportSecurity transportSecurity, out WsFederationHttpSecurityMode mode)
+    /// <summary>
+    /// These client credentials class that will serve up a SecurityTokenManager that will use a TrustChannel to get a token from an STS
+    /// </summary>
+    public class WSTrustChannelClientCredentials : ClientCredentials
+    {
+        /// <summary>
+        /// Default constructor
+        /// </summary>
+        public WSTrustChannelClientCredentials()
+            : base()
         {
-            mode = WsFederationHttpSecurityMode.None | WsFederationHttpSecurityMode.Message | WsFederationHttpSecurityMode.TransportWithMessageCredential;
-            if (transport is HttpsTransportBindingElement)
-            {
-                mode = WsFederationHttpSecurityMode.TransportWithMessageCredential;
-            }
-            else if (transport is HttpTransportBindingElement)
-            {
-                mode = WsFederationHttpSecurityMode.None | WsFederationHttpSecurityMode.Message;
-            }
-            else
-            {
-                return false;
-            }
-            return true;
+            // Set SupportInteractive to false to suppress Cardspace UI
+            //SupportInteractive = false;
         }
 
-        // if you make changes here, see also WS2007FederationHttpBinding.TryCreateSecurity()
-        static bool TryCreateSecurity(SecurityBindingElement sbe, WsFederationHttpSecurityMode mode, HttpTransportSecurity transportSecurity, out WsFederationHttpSecurity security)
+        /// <summary>
+        /// Copy constructor
+        /// </summary>
+        /// <param name="other">The WSTrustChannelClientCredentials to create a copy of</param>
+        protected WSTrustChannelClientCredentials(WSTrustChannelClientCredentials other)
+            : base(other)
         {
-            if (!WsFederationHttpSecurity.TryCreate(sbe, mode, transportSecurity, WsMessageSecurityVersion, out security))
-                return false;
-
-            // the last check: make sure that security binding element match the incoming security
-            return SecurityElement.AreBindingsMatching(security.CreateMessageSecurity(isReliableSession, WSMessageSecurityVersion), sbe);
         }
 
-        public override BindingElementCollection CreateBindingElements()
-        {   // return collection of BindingElements
-
-            BindingElementCollection bindingElements = base.CreateBindingElements();
-            // order of BindingElements is important
-
-            return bindingElements;
-        }
-
-        protected override SecurityBindingElement CreateMessageSecurity()
+        protected override ClientCredentials CloneCore()
         {
-            throw new NotImplementedException();
+            return new WSTrustChannelClientCredentials(this);
         }
+
+        /// <summary>
+        /// Extensibility point for serving up the WSTrustChannelSecurityTokenManager
+        /// </summary>
+        /// <returns>WSTrustChannelSecurityTokenManager</returns>
+        public override SecurityTokenManager CreateSecurityTokenManager()
+        {
+            // return custom security token manager
+            return new WSTrustChannelSecurityTokenManager(this);
+        }
+    }
+
+    /// <summary>
+    /// Returns a WSTrustChannelSecurityTokenProvider to obtain token Saml
+    /// </summary>
+    public class WSTrustChannelSecurityTokenManager : ClientCredentialsSecurityTokenManager
+    {
+        public WSTrustChannelSecurityTokenManager(WSTrustChannelClientCredentials clientCredentials)
+            : base(clientCredentials)
+        { }
+
+        /// <summary>
+        /// Make use of this extensibility point for returning a custom SecurityTokenProvider when SAML tokens are specified in the tokenRequirement
+        /// </summary>
+        /// <param name="tokenRequirement">A SecurityTokenRequirement  </param>
+        /// <returns>The appropriate SecurityTokenProvider</returns>
+        public override SecurityTokenProvider CreateSecurityTokenProvider(SecurityTokenRequirement tokenRequirement)
+        {
+            // If token requirement matches SAML token return the custom SAML token provider
+            // that performs custom work to serve up the token
+            return new WSTrustChannelSecurityTokenProvider(tokenRequirement);
+        }
+    }
+
+    /// <summary>
+    /// Custom WSTrustChannelSecurityTokenProvider that returns a SAML assertion
+    /// </summary>
+    public class WSTrustChannelSecurityTokenProvider : SecurityTokenProvider
+    {
+        //Microsoft.IdentityModel.Tokens.SecurityToken _st;
+        SecurityTokenRequirement _tokenRequirement;
+        //WSTrustChannelFactory _trustChannelFactory;
+
+        public WSTrustChannelSecurityTokenProvider(SecurityTokenRequirement tokenRequirement)
+        {
+            if (tokenRequirement == null)
+                throw new ArgumentNullException("tokenRequirement");
+
+            _tokenRequirement = tokenRequirement;
+        }
+
+        /// <summary>
+        /// Calls out to the STS, if necessary to get a token
+        /// </summary>
+        protected override System.IdentityModel.Tokens.SecurityToken GetTokenCore(TimeSpan timeout)
+        {
+            /*            if (_st != null)
+                            return _st;
+
+                        IssuedSecurityTokenParameters istp = _tokenRequirement.GetProperty<IssuedSecurityTokenParameters>(ServiceModelSecurityTokenRequirement.IssuedSecurityTokenParametersProperty);
+
+                        if (_trustChannelFactory == null)
+                        {
+                            _trustChannelFactory = new WSTrustChannelFactory(istp.IssuerBinding, istp.IssuerAddress);
+                            _trustChannelFactory.TrustVersion = TrustVersion.WSTrust13;
+                        }
+
+                        WSTrustChannel channel = null;
+
+                        try
+                        {
+                            RequestSecurityToken rst = new RequestSecurityToken(WSTrust13Constants.RequestTypes.Issue);
+
+                            // need to figure out the trust version. Assuming 1.3
+                            if (istp.KeyType == SecurityKeyType.AsymmetricKey)
+                                rst.KeyType = WSTrust13Constants.KeyTypes.Asymmetric;
+                            else if (istp.KeyType == SecurityKeyType.SymmetricKey)
+                                rst.KeyType = WSTrust13Constants.KeyTypes.Symmetric;
+                            else
+                                rst.KeyType = WSTrust13Constants.KeyTypes.Bearer;
+
+                            rst.AppliesTo = istp.IssuerAddress;
+                            rst.TokenType = istp.TokenType;
+
+                            channel = (WSTrustChannel)_trustChannelFactory.CreateChannel();
+
+                            // token is a GenericXmlSecurityToken and can be attached directly to message;
+                            _st = channel.Issue(rst);
+
+                            ((IChannel)channel).Close();
+                            channel = null;
+
+                            return _st;
+                        }
+                        finally
+                        {
+                            if (channel != null)
+                            {
+                                ((IChannel)channel).Abort();
+                            }
+                        }
+                        */
+
+            return new UP();// System.IdentityModel.Tokens.SecurityToken UsernameSecurityToken(); ;
+        }
+    }
+
+    public class UP : System.IdentityModel.Tokens.SecurityToken
+    {
+        public override string Id => throw new NotImplementedException();
+
+        public override DateTime ValidFrom => throw new NotImplementedException();
+
+        public override DateTime ValidTo => throw new NotImplementedException();
+
+        public override ReadOnlyCollection<System.IdentityModel.Tokens.SecurityKey> SecurityKeys => throw new NotImplementedException();
     }
 }

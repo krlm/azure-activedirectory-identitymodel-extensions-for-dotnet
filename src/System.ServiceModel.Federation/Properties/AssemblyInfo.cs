@@ -25,34 +25,14 @@
 //
 //------------------------------------------------------------------------------
 
-#pragma warning disable 1591
 
-namespace Microsoft.IdentityModel.Protocols.WsTrust
-{
-    /// <summary>
-    /// Classes for specifying WS-Trust Feb2005, 1.3 and 1.4.
-    /// </summary>
-    public abstract class WsTrustVersion
-    {
-        public static WsTrustVersion TrustFeb2005 = new WsTrustFeb2005Version();
+using System;
+using System.Reflection;
+using System.Runtime.InteropServices;
 
-        public static WsTrustVersion Trust13 = new WsTrust13Version();
-
-        public static WsTrustVersion Trust14 = new WsTrust14Version();
-    }
-
-    /// <summary>
-    /// Class for specifying WS-Trust Feb2005.
-    /// </summary>
-    internal class WsTrustFeb2005Version : WsTrustVersion {}
-
-    /// <summary>
-    /// Class for specifying WS-Trust 1.3.
-    /// </summary>
-    internal class WsTrust13Version : WsTrustVersion {}
-
-    /// <summary>
-    /// Class for specifying WS-Trust 1.4.
-    /// </summary>
-    internal class WsTrust14Version : WsTrustVersion {}
-}
+[assembly: AssemblyInformationalVersion("0.0.1")]
+[assembly: AssemblyFileVersion("0.0.1")]
+[assembly: AssemblyMetadata("Serviceable", "True")]
+[assembly: AssemblyVersion("0.0.1")]
+[assembly: CLSCompliant(false)]
+[assembly: ComVisible(false)]

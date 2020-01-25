@@ -7,8 +7,9 @@
 
   <ItemGroup>
     <PackageReference Include="dotnet-svcutil.xmlserializer" Version="1.2.0-ci.20059.1" />
-    <PackageReference Include="Microsoft.IdentityModel.Protocols.WsTrust" Version="6.4.0-preview-70109205415" />
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.WsTrust" Version="0.0.1-preview" />
     <PackageReference Include="System.Private.ServiceModel" Version="4.7.0-ci.20059.1" />
+    <PackageReference Include="System.ServiceModel.Federation" Version="0.0.1-preview" />
     <PackageReference Include="System.ServiceModel.Http" Version="4.7.0-ci.20059.1" />
     <PackageReference Include="System.ServiceModel.Primitives" Version="4.7.0-ci.20059.1" />
     <PackageReference Include="System.ServiceModel.Security" Version="4.7.0-ci.20059.1" />
